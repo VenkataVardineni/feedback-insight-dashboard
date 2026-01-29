@@ -1,62 +1,102 @@
 ## Feedback Insight Dashboard
 
-Visual dashboard to analyze sentiment of batches of feedback.
+A web dashboard that helps product teams quickly understand the **overall sentiment** of a batch of user feedback.
 
-### What you get
+The core UX is intentionally simple:
 
-- Paste ~50 feedback lines
+- Paste a dump of feedback (one comment per line)
 - Click **Analyze**
-- See:
-  - overall positive/neutral/negative percentages
-  - a table of each comment with sentiment + score
-  - a small chart summarizing mood distribution
+- Immediately see:
+  - overall **positive / neutral / negative** percentages
+  - a per-comment table (sentiment label + score)
+  - a compact “mood distribution” chart
 
-### Run with Docker
+---
 
-```bash
-docker compose up --build
-```
+## Tech stack
 
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:8000` (health: `/health`)
+- **Frontend**: React + TypeScript (Vite)
+- **Backend**: FastAPI (Python) + Uvicorn
+- **Sentiment provider**:
+  - **SmartReview Sentiment Service** (optional, via HTTP)
+  - a **built-in fallback heuristic** so the app runs end-to-end even without SmartReview
+- **Deployment**: Docker Compose
+  - Frontend is served with **Nginx** (static SPA) and reverse-proxies API calls to the backend
 
-### Run locally (no Docker)
+---
 
-Backend:
+## Project structure
 
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
+- `frontend/`
+  - React page with textarea input, Analyze button, results table, and chart
+  - Calls the backend endpoint `POST /feedback/analyze-batch`
+- `backend/`
+  - FastAPI service implementing sentiment analysis endpoints + in-memory request stats
+- `docs/architecture.md`
+  - Architecture overview and data flow
+- `SETUP.md`
+  - Step-by-step setup instructions (Docker + local)
 
-Frontend:
+---
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+## How it works (end-to-end)
 
-### API
+1. The PM pastes feedback lines into the UI (one line = one comment).
+2. Frontend sends:
+   - `POST /feedback/analyze-batch`
+   - body: `{ "feedback": ["line1", "line2", ...] }`
+3. Backend scores each line:
+   - If `SMARTREVIEW_URL` is set, calls SmartReview:
+     - `POST {SMARTREVIEW_URL}/sentiment/analyze` with `{ "text": "..." }`
+   - Otherwise, uses a small built-in heuristic (so the app still works).
+4. Backend returns:
+   - per-item results (text, label, score)
+   - aggregate stats (positive/neutral/negative %, average score)
+5. Frontend renders KPIs, table, and mood chart.
 
-- `POST /feedback/analyze-batch`
-  - body: `{ "feedback": ["text1", "text2"] }`
-  - returns: per-item results + aggregate stats
-- `GET /feedback/stats?last_n=20`
-  - returns: aggregated stats over last N requests stored in memory
+---
 
-### SmartReview integration
+## API reference
 
-If you have SmartReview Sentiment Service running, set:
+### `GET /health`
 
-- `SMARTREVIEW_URL` (example `http://smartreview:9000`)
+Returns:
 
-Backend will call `POST /sentiment/analyze` on SmartReview. If not set/unreachable, a simple local heuristic is used so the app still runs.
+- `{ "status": "ok" }`
 
-### Docs
+### `POST /feedback/analyze-batch`
 
-See `docs/architecture.md`.
+Request:
+
+- body:
+  - `{ "feedback": ["text1", "text2", "..."] }`
+
+Response (shape):
+
+- `items[]`: `{ text, score, label }`
+  - `score`: float in `[-1, 1]` (higher = more positive)
+  - `label`: `"positive" | "neutral" | "negative"`
+- `stats`: `{ total, positive_pct, neutral_pct, negative_pct, avg_score }`
+
+### `GET /feedback/stats?last_n=20`
+
+Aggregates stats over the last N requests stored in memory (rolling window).
+
+Response includes:
+
+- total items analyzed across the considered requests
+- label counts and percentages
+- average score across all considered items
+
+---
+
+## Run it
+
+See `SETUP.md`.
+
+---
+
+## Docs
+
+- `docs/architecture.md`
 
