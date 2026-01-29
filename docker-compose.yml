@@ -1,0 +1,27 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      - STATS_WINDOW=50
+      - CORS_ALLOW_ORIGIN=*
+      # - SMARTREVIEW_URL=http://smartreview:9000
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+  # Optional: wire this up if you have a SmartReview container exposing POST /sentiment/analyze
+  # smartreview:
+  #   image: smartreview-sentiment:latest
+  #   ports:
+  #     - "9000:9000"
+
